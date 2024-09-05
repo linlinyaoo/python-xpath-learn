@@ -110,3 +110,28 @@ if __name__ == '__main__':
         }
         result = pro_duce(cur_data)
         print(json.dumps(result, ensure_ascii=False,indent=4))
+
+
+
+import os  
+  
+# 设定包含part文件的目录  
+directory = '/path/to/your/directory'  
+# 合并后文件的名称  
+merged_filename = 'merged_file'  
+  
+# 列出目录中的所有文件，并筛选出以'part'开头的文件  
+part_files = [f for f in os.listdir(directory) if f.startswith('part')]  
+  
+# 按照文件名的数字部分进行排序（假设part文件名是数字排序的，如part1, part2等）  
+part_files.sort(key=lambda x: int(x.split('part')[1].split('.')[0]) if 'part' in x else float('inf'))  
+  
+# 打开合并后的文件准备写入  
+with open(os.path.join(directory, merged_filename), 'wb') as merged_file:  
+    for part_file in part_files:  
+        # 打开每个part文件准备读取  
+        with open(os.path.join(directory, part_file), 'rb') as f:  
+            # 读取并写入合并文件  
+            merged_file.write(f.read())  
+  
+print(f'合并完成，合并后的文件名为：{os.path.join(directory, merged_filename)}')
