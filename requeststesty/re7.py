@@ -83,3 +83,30 @@ if __name__ == '__main__':
         }
         processed_result = process_data(cur_data)
         print(json.dumps(processed_result, ensure_ascii=False, indent=4))
+
+
+
+import json
+
+# 假设你的part文件在本地
+part_file_path = 'path_to_your_part_file/part-00000'
+output_json_file = 'merged_output.json'
+
+# 用于存储所有JSON记录的列表
+all_records = []
+
+# 读取part文件
+with open(part_file_path, 'r') as file:
+    for line in file:
+        # 解析每一行的JSON数据并添加到列表中
+        try:
+            record = json.loads(line.strip())
+            all_records.append(record)
+        except json.JSONDecodeError:
+            print(f"Error decoding line: {line.strip()}")
+
+# 将所有记录保存为一个JSON数组文件
+with open(output_json_file, 'w') as output_file:
+    json.dump(all_records, output_file, ensure_ascii=False, indent=4)
+
+print(f"JSON data saved to {output_json_file}")
