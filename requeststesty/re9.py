@@ -34,3 +34,17 @@ with open('data.json', 'r', encoding='utf-8') as file:
 
 # 输出非空 ing 字段的统计结果
 print(f"非空 ing 字段的总数为: {non_empty_content_count}")
+
+
+
+#!/bin/bash  
+  
+# 设置HDFS上的目录路径  
+hdfs_dir="/path/to/a"  
+  
+# 使用hdfs dfs -ls命令列出目录下所有以part开头的文件  
+# 然后通过grep过滤出这些文件，并通过xargs和hdfs dfs -cat | wc -l计算总行数  
+total_lines=$(hdfs dfs -ls "$hdfs_dir/part*" | grep '^[^d]' | awk '{print $8}' | xargs -I {} hdfs dfs -cat {} | wc -l)  
+  
+# 输出总行数  
+echo "Total lines: $total_lines"
