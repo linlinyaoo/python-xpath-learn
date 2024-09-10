@@ -54,3 +54,48 @@ print(result)
 # 输出结果
 for item in result:
     print(item)
+
+
+
+
+from lxml import etree
+
+html_content = '''<div id="con_one_2" style="display: block;">
+<p style="...">通用名称：奥美拉唑肠溶胶囊</p>
+<p style="...">&nbsp;&nbsp;商品名称：奥美拉唑肠溶胶囊(立卫克)</p>
+<p style="...">&nbsp;&nbsp;拼音全码：AoMeiLaZuoChangRongJiaoNang(LiWeiKe)</p>
+<p style="..."><span style="font-weight: bold;">【主要成份】</span>&nbsp;本品主要成份为：奥美拉唑。</p>
+<p style="..."><span style="font-weight: bold;">【成 份】</span></p>
+<p style="...">&nbsp;&nbsp;化学名： S-甲氧基-2-（（（4-甲氧基-3，S-二甲基-2 -吡啶基）甲基）亚磺酰基）-1H-苯并咪唑</p>
+...
+</div>'''
+
+# 使用lxml解析HTML
+tree = etree.HTML(html_content)
+div = tree.xpath('//div[@id="con_one_2"]')[0]
+
+# 初始化字典存储提取数据
+data = {}
+
+# 提取所有的<p>标签
+paragraphs = div.xpath('.//p')
+
+for p in paragraphs:
+    bold_text = p.xpath('.//span[@style="font-weight: bold;"]/text()')
+    full_text = p.xpath('string()').strip()
+    
+    if bold_text:
+        # 获取【...】格式的标签内容
+        key = bold_text[0].strip("【】")
+        # 获取【...】后面的值
+        value = full_text.split("】")[-1].strip()
+        data[key] = value
+    else:
+        # 处理没有【】的情况
+        key, value = full_text.split("：", 1)
+        data[key.strip()] = value.strip()
+
+# 打印提取的内容
+for key, value in data.items():
+    print(f'{key}: {value}')
+
