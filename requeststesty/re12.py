@@ -99,3 +99,45 @@ for p in paragraphs:
 for key, value in data.items():
     print(f'{key}: {value}')
 
+
+def extract_info(html_data, sel):
+    result = []
+
+    # 解析 HTML 数据
+    from lxml import etree
+    tree = etree.HTML(html_data)
+
+    # 获取包含数据的 li 元素
+    items = tree.xpath('//li')  # 假设 <li> 标签包含需要提取的信息
+
+    for li in items:
+        spans = li.xpath('.//span')
+        for span in spans:
+            # 获取 <em> 标签的文本作为 key
+            key = span.xpath('.//em/text()')
+
+            # 获取整个 <span> 的文本内容，包括 <i> 标签的内容
+            value = span.xpath('string()')
+
+            # 如果 <em> 标签有值，且整个 <span> 的文本不为空
+            if key and value:
+                key_text = key[0].strip().replace('：', '')  # 去除冒号和空格
+                value_text = value.split('：', 1)[-1].strip()  # 获取冒号后面的内容
+
+                # 如果 <i> 标签存在，则将其文本内容加上
+                i_text = span.xpath('.//i/text()')
+                if i_text:
+                    value_text = i_text[0].strip()  # 获取 <i> 标签中的文本，去掉空格
+
+                # 根据输入的 sel 来决定是否提取这个字段
+                if key_text == sel:
+                    result.append({key_text: value_text})
+
+    return result
+
+# 使用示例
+html_data = """<html>...</html>"""  # 你的 HTML 数据
+sel = '通用名称'  # 你要提取的字段，例如 '通用名称', '批准文号' 或 '生产企业'
+info = extract_info(html_data, sel)
+for item in info:
+    print(item)
