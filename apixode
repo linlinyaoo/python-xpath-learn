@@ -1,0 +1,254 @@
+import decimal
+import os
+from collections import defaultdict
+import requests
+import json
+import time
+import logging
+import hashlib
+import base64
+from decimal import Decimal, getcontext
+from datetime import datetime
+
+class ZhongJ(object):
+    def __init__(self):
+        self.url = ""
+        self.api_key = ""
+        self.secret = ""
+        self.headers = {
+            'Content-Type': 'application/json',
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        }
+        self.max_retries = 3
+        self.setup_logging()
+
+    def setup_logging(self):
+        logging.basicConfig(
+            filename='api_requests.log',
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger()
+
+    def md5_base(self, node):
+        md5 = hashlib.md5(node.encode("utf-8")).digest()
+        md5_base = base64.b64encode(md5).decode('utf-8')
+        return md5_base
+
+    def generate_sign(self, data):
+        data_str = json.dumps(data, separators=(',', ':'))
+        return self.md5_base(data_str)
+
+    def make_request(self, id, start_date, end_date):
+        data = {
+            "apiSecret": self.secret,
+            "id": id,
+            "startDate": start_date,
+            "endDate": end_date,
+            "sort": ""
+        }
+        sign = self.generate_sign(data)
+        current_time = int(time.time())
+
+        payload = {
+            "apiKey": self.api_key,
+            "id": id,
+            "startDate": start_date,
+            "endDate": end_date,
+            "sort": "",
+            "timeStamp": current_time,
+            "sign": sign
+        }
+        return payload
+
+    def post_request(self, re_id, start_date, end_date):
+        data = []
+        for id in re_id:
+            for year in range(start_date, end_date + 1):
+                start_date_str = f"{year}-01-01"
+                end_date_str = f"{year}-12-31"
+                api_token = self.make_request(id, start_date_str, end_date_str)
+
+                attempt = 0
+                while attempt < self.max_retries:
+                    try:
+                        start_time = time.time()
+                        res = requests.post(url=self.url, json=api_token, headers=self.headers)
+                        duration = time.time() - start_time
+
+                        if res.status_code == 200:
+                            response_data = res.json()
+                            data_size = len(response_data)
+
+                            self.logger.info(
+                                f"Success: Year={year}, Duration={duration:.2f}s, DataSize={data_size}"
+                            )
+                            data.append(response_data)
+                            break
+                        else:
+                            raise requests.RequestException(f"Error {res.status_code}")
+
+                    except requests.RequestException as e:
+                        self.logger.error(
+                            f"Failure: Year={year}, Attempt={attempt + 1}, Error={str(e)}"
+                        )
+                        attempt += 1
+                        time.sleep(2 ** attempt)
+
+                        if attempt == self.max_retries:
+                            self.logger.error(
+                                f"Max retries reached for ID={id}, Year={year}"
+                            )
+        return data
+
+    def clean_file(self, record):
+        results = []
+        seen = set()  # 用于存储已处理过的数据
+        ttmap = {i["userIndicatorCode"]: i["unit"] for i in record["indicatorList"]}
+
+        for base in record["dataList"]:
+            item = {
+                "id": base["areaName"],
+                "code": base["areaCode"]
+            }
+            for k, v in ttmap.items():
+                if k in base:
+                    if base[k] is None:
+                        continue
+                    value = str(base[k])
+
+                    try:
+                        # 根据单位进行abs_value转换
+                        if v in ["万元", "万美元", "万人次", "万人", "万户"]:
+                            abs_value = Decimal(value) * 10000
+                        elif v == "亿元":
+                            abs_value = Decimal(value) * 100000000
+                        elif v == "%":
+                            abs_value = Decimal(value) / 100
+                        else:
+                            abs_value = float(value)
+
+                        # 格式化abs_value
+                        if abs_value > 1:
+                            abs_value = int(abs_value) if abs_value == float(int(abs_value)) else round(
+                                float(abs_value), 3)
+                        else:
+                            abs_value = round(float(abs_value), 5)
+
+                        item[k] = {
+                            "time": base["time"],
+                            "value": value,
+                            "unit": v,
+                            "abs_value": abs_value
+                        }
+
+                        # 生成唯一标识符
+                        unique_key = (item["id"], item["code"], k, item[k]["time"], item[k]["value"], item[k]["unit"],
+                                      item[k]["abs_value"])
+                        if unique_key not in seen:
+                            seen.add(unique_key)
+
+                        #     self.logger.info(
+                        #         f"Added unique item: ID={item['id']}, Code={item['code']}, Time={item[k]['time']}, Value={item[k]['value']}, Unit={item[k]['unit']}, AbsValue={item[k]['abs_value']}")
+                        # else:
+                        #     self.logger.warning(
+                        #         f"Duplicate item skipped: ID={item['id']}, Code={item['code']}, Time={item[k]['time']}, Value={item[k]['value']}, Unit={item[k]['unit']}, AbsValue={item[k]['abs_value']}")
+
+                    except decimal.InvalidOperation:
+                        self.logger.error(f"无效的数字格式：指标 {k} 的值为 {value}")
+                        continue
+            results.append(item)
+        return results
+    def transform_data(self, cleaned_data):
+        transformed = defaultdict(lambda: {"id": "", "code": ""})
+
+        for item in cleaned_data:
+            key = (item['id'], item['code'])
+            transformed[key]["id"] = item['id']
+            transformed[key]["code"] = item['code']
+
+            for k, v in item.items():
+                if k.startswith('A0'):
+                    if k not in transformed[key]:
+                        transformed[key][k] = []
+
+                    indicator_data = {
+                        "time": v['time'],
+                        "value": v['value'],
+                        "unit": v['unit'],
+                        "abs_value": v['abs_value']
+                    }
+                    transformed[key][k].append(indicator_data)
+
+        # 按时间倒序排序
+        for key in transformed:
+            for k in transformed[key]:
+                if k.startswith('A0'):
+                    transformed[key][k].sort(key=lambda x: x['time'], reverse=True)
+
+        # 将字典转换为列表
+        result = list(transformed.values())
+
+        return result
+
+if __name__ == '__main__':
+
+    re_id = []
+    start_date = 2020
+    end_date = 2023
+    zj = ZhongJ()
+    num = 0
+
+    try:
+        raw_data = zj.post_request(re_id, start_date, end_date)
+        all_cleaned_data = []
+
+        for data in raw_data:
+            num += 1
+            print(num)
+            try:
+                cleaned_data = zj.clean_file(data)
+                all_cleaned_data.extend(cleaned_data)
+            except Exception as e:
+                logging.error(f"Error cleaning data: {e}")
+
+        transformed_data = zj.transform_data(all_cleaned_data)
+
+        current_date = datetime.now().strftime('%Y%m%d')
+
+        # 构造新的文件名
+        file_name = f'{current_date}/zj.json'
+
+        # 写入数据
+        with open(file_name, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(transformed_data, ensure_ascii=False) + "\n")
+
+        # Write raw and cleaned data to JSON files
+        with open('zj12312.json', 'w', encoding='utf-8') as f:
+            f.write(json.dumps(raw_data, ensure_ascii=False))
+
+    except Exception as e:
+        logging.error(f"Error fetching raw data: {e}")
+
+
+"""
+#!/bin/bash
+
+# 运行zj.py
+python3 /path/to/zj.py
+
+# 等待文件生成
+sleep 5  # 根据实际情况调整等待时间
+
+# 获取当前日期
+DATE=$(date +%Y%m%d)
+
+# 启动gz.sh
+/path/to/gz.sh
+
+# 使用obsutil上传文件
+obsutil cp /path/to/generated/file obs://address/$DATE/
+
+chmod +x /path/to/gz.sh
+
+"""
