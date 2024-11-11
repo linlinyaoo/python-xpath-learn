@@ -231,6 +231,49 @@ if __name__ == '__main__':
         logging.error(f"Error fetching raw data: {e}")
 
 
+--second
+
+ transformed_data = zj.transform_data(all_cleaned_data)
+
+        # 计算汇总信息
+        id_summary = defaultdict(lambda: {"count": 0, "min_time": None, "max_time": None})
+        for item in transformed_data:
+            id_summary[item['id']]['count'] += 1
+            for k, v in item.items():
+                if k.startswith('A0'):
+                    for data in v:
+                        time_str = data['time']
+                        if id_summary[item['id']]['min_time'] is None or time_str < id_summary[item['id']]['min_time']:
+                            id_summary[item['id']]['min_time'] = time_str
+                        if id_summary[item['id']]['max_time'] is None or time_str > id_summary[item['id']]['max_time']:
+                            id_summary[item['id']]['max_time'] = time_str
+
+        # 输出汇总信息
+        total_data_count = sum(info['count'] for info in id_summary.values())
+        unique_ids = len(id_summary)
+
+        for id, info in id_summary.items():
+            zj.logger.info(
+                f"ID={id}, 数据量={info['count']}, 最小时间={info['min_time']}, 最大时间={info['max_time']}"
+            )
+
+        zj.logger.info(f"总数据量={total_data_count}, 不重复ID数量={unique_ids}")
+
+        current_date = datetime.now().strftime('%Y%m%d')
+
+        # 构造新的文件名
+        file_name = f'{current_date}/zj.json'
+
+        # 写入数据
+        with open(file_name, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(transformed_data, ensure_ascii=False) + "\n")
+
+        # Write raw and cleaned data to JSON files
+        with open('zj12312.json', 'w', encoding='utf-8') as f:
+            f.write(json.dumps(raw_data, ensure_ascii=False))
+
+    except Exception as e:
+        logging.error(f"Error fetching raw data: {e}")
 """
 #!/bin/bash
 
