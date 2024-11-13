@@ -295,3 +295,37 @@ obsutil cp /path/to/generated/file obs://address/$DATE/
 chmod +x /path/to/gz.sh
 
 """
+
+
+ def transform_data(self, record):
+        results = []
+        indicator_map = {i["userIndicatorCode"]: {"unit": i["unit"], "indicatorName": i["indicatorName"]} for i in
+                         record["indicatorList"]}
+
+        for base in record["dataList"]:
+            area_name = base["areaName"]
+            area_code = base["areaCode"]
+            time = base["time"]
+
+            for k, v in base.items():
+                if k in indicator_map:
+                    unit = indicator_map[k]["unit"]
+                    indicator_name = indicator_map[k]["indicatorName"]
+                    value = str(v)
+
+                    # 如果值为 None，则保留空字符串
+                    if value == 'None':
+                        value = ''
+
+                    item = {
+                        "areaName": area_name,
+                        "areaCode": area_code,
+                        "incode": k,
+                        "invalue": value,
+                        "unit": unit,
+                        "time": time,
+                        "indicatorName": indicator_name
+                    }
+                    results.append(item)
+
+        return results
