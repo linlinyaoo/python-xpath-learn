@@ -315,7 +315,7 @@ chmod +x /path/to/gz.sh
 
                     # 如果值为 None，则保留空字符串
                     if value == 'None':
-                        value = ''
+                        value = null
 
                     item = {
                         "areaName": area_name,
